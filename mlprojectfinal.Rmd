@@ -1,0 +1,82 @@
+---
+title: "Machine Learning Prediction"
+output: html_document
+---
+
+## Data Preparation
+
+The first step is to read the data, and then clean it up. First, the classes data is turned into a factor, then a training and validation set is created from a partition. Next the NA values are replaced with zero, and the near zero variances columns are removed, which should also remove the columns where most of the values are NA. Last, the first 7 columns, which do not seem appropriate for the prediction model because they are just labels, are removed.
+
+```{r, include=FALSE}
+
+set.seed(12345)
+library(caret)
+library(randomForest)
+
+```
+
+
+```{r setup, echo=TRUE}
+
+
+
+rawdata<-read.csv("pml-training.csv")
+
+rawdata$classe <- factor(rawdata$classe)
+part <- createDataPartition(rawdata$classe, p = 0.8, list = FALSE)
+trainset <- rawdata[part, ]
+validset <- rawdata[-part, ]
+
+tidyset <- trainset
+tidyset[is.na(tidyset)] <- 0
+
+nz <- nearZeroVar(tidyset)
+tidyset <- tidyset[,-nz]
+tidyset <- tidyset[,-(1:7)]
+
+```
+
+## Creating the Model
+
+A random forest is used because that is a suitable model when there is a large number of variables. First, a training control is created to do several repeated cross validations. Next, the model is created using the randomForest package. The number of trees was set to 5 just to decrease the time it took to run, and the results ended up being just as strong as with a larger number.
+
+```{r, echo=TRUE, cache=TRUE}
+
+tcontrol <- trainControl(method = "repeatedcv", number = 10, repeats = 2)
+
+testmodel <- randomForest(classe ~ ., data = tidyset, importance = TRUE, ntrees = 5, trcontrol=tcontrol)
+
+```
+
+## Validating the Model
+
+The models predictions are checked against the tidied data, then the untidied training data, then, since the accuracy was close to 1 for both groups, it was checked against the testing set because the in-group error for the model is very small. Various tests on the test data return an accuracy around 0.995, suggesting that the out of group error is around 0.005, which seems quite good.
+
+```{r}
+predicts <- predict(testmodel, tidyset)
+confusionMatrix(predicts, tidyset$classe)[c("table","overall")]
+
+predicttrain <- predict(testmodel, trainset)
+confusionMatrix(predicttrain, trainset$classe)[c("table","overall")]
+
+predictvalid <- predict(testmodel, validset)
+confusionMatrix(predictvalid, validset$classe)[c("table","overall")]
+
+```
+
+## Analyzing the Model
+
+We can examine the variables with the highest importance, below are two plots that show the importance of the top variables to the model, and their importance towards the prediction of each of prediction classes.
+
+
+```{r}
+
+#head(varImp(testmodel),25)
+varImpPlot(testmodel)
+heatmap(as.matrix((varImp(testmodel))))
+
+```
+
+
+
+
